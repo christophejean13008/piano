@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Piano Syllabique</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@700;800&display=swap');
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+body {
+  background: #0f0f1a;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  font-family: 'Nunito', sans-serif;
+  overflow: hidden;
+  user-select: none;
+  padding: 8px 0 4px;
+}
+
+h1 {
+  font-family: 'Fredoka One', cursive;
+  color: #fff;
+  font-size: clamp(0.9rem, 2vw, 1.4rem);
+  letter-spacing: 2px;
+  text-shadow: 0 2px 14px rgba(120,120,255,0.5);
+  margin-bottom: 6px;
+}
+
+/* ══ AFFICHAGE SYLLABE ══ */
+#syllabe-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  min-height: 54px;
+}
+
+.syl-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-family: 'Fredoka One', cursive;
+  transition: all 0.18s;
+  min-width: 48px;
+  padding: 4px 10px;
+}
+
+#box-c {
+  background: rgba(255,255,255,0.08);
+  border: 2px dashed rgba(100,140,255,0.4);
+  color: rgba(255,255,255,0.3);
+  font-size: clamp(1.4rem, 4vw, 2.2rem);
+}
+#box-c.filled {
+  background: rgba(100,140,255,0.2);
+  border-color: #6496ff;
+  color: #a0c0ff;
+}
+
+#box-v {
+  background: rgba(255,255,255,0.08);
+  border: 2px dashed rgba(255,140,80,0.4);
+  color: rgba(255,255,255,0.3);
+  font-size: clamp(1.4rem, 4vw, 2.2rem);
+}
+#box-v.filled {
+  background: rgba(255,140,80,0.2);
+  border-color: #ff9050;
+  color: #ffcc99;
+}
+
+#arrow {
+  color: rgba(255,255,255,0.2);
+  font-size: 1.4rem;
+  transition: color 0.2s;
+}
+#arrow.ready { color: #7cfc00; }
+
+#box-result {
+  background: rgba(255,255,255,0.06);
+  border: 2px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.15);
+  font-size: clamp(1.8rem, 5vw, 2.8rem);
+  min-width: 80px;
+  transition: all 0.25s;
+}
+#box-result.playing {
+  background: linear-gradient(135deg, rgba(100,255,150,0.2), rgba(100,200,255,0.2));
+  border-color: #7cfc00;
+  color: #7cfc00;
+  box-shadow: 0 0 20px rgba(124,252,0,0.3);
+  transform: scale(1.08);
+}
+
+#hint-text {
+  color: rgba(255,255,255,0.28);
+  font-size: clamp(0.6rem, 1.1vw, 0.75rem);
+  text-align: center;
+  min-height: 18px;
+  transition: all 0.2s;
+}
+#hint-text.step2 { color: #ff9050; }
+#hint-text.go    { color: #7cfc00; }
+
+/* ══ LAYOUT PRINCIPAL ══ */
+#main-layout {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 0 8px;
+}
+
+/* ══ PIANO ══ */
+#piano-wrap {
+  position: relative;
+  flex: 1;
+}
+
+#piano {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+}
+
+/* ── Touches blanches (consonnes) ── */
+.wk {
+  position: relative;
+  border-radius: 0 0 10px 10px;
+  border: 2px solid rgba(255,255,255,0.1);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 8px;
+  margin: 0 2px;
+  transition: filter .08s, transform .08s, box-shadow .08s;
+  box-shadow: 0 7px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15);
+  background-image: repeating-linear-gradient(
+    to bottom, transparent 0, transparent 24px,
+    rgba(255,255,255,0.16) 24px, rgba(255,255,255,0.16) 26px
+  );
+}
+.wk:active, .wk.selected {
+  filter: brightness(1.6) saturate(1.3);
+  transform: scaleY(0.97) translateY(3px);
+  box-shadow: 0 0 18px rgba(100,180,255,0.6), 0 2px 6px rgba(0,0,0,0.3);
+}
+.wk .lbl {
+  font-family: 'Segoe Script','Brush Script MT',cursive;
+  font-weight: bold;
+  color: white;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  line-height: 1;
+  text-align: center;
+}
+
+/* ── Touches noires (voyelles) ── */
+.bk {
+  position: absolute;
+  border-radius: 0 0 8px 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 7px;
+  z-index: 10;
+  top: 0;
+  box-shadow: 0 9px 24px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.07);
+  transition: filter .08s, transform .08s;
+}
+.bk:active, .bk.selected {
+  filter: brightness(2.2) saturate(1.4);
+  transform: scaleY(0.97) translateY(2px);
+  box-shadow: 0 0 16px rgba(255,160,80,0.7);
+}
+.bk .lbl {
+  font-family: 'Segoe Script','Brush Script MT',cursive;
+  color: white;
+  text-align: center;
+  line-height: 1.2;
+  text-shadow: 0 1px 5px rgba(0,0,0,0.9);
+  font-weight: bold;
+}
+.bk .sub {
+  color: rgba(255,255,255,0.65);
+  font-size: 0.7em;
+  text-align: center;
+  line-height: 1.1;
+}
+
+/* ══ PANNEAU DIGRAPHES ══ */
+#digraphe-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: clamp(60px, 9vw, 90px);
+  flex-shrink: 0;
+}
+
+#digraphe-panel h3 {
+  color: rgba(255,255,255,0.4);
+  font-size: clamp(0.55rem, 1vw, 0.7rem);
+  text-align: center;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.dg-btn {
+  border-radius: 8px;
+  border: 2px solid rgba(255,255,255,0.1);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 4px;
+  transition: filter .08s, transform .08s, box-shadow .08s;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+}
+.dg-btn:active, .dg-btn.selected {
+  filter: brightness(1.6) saturate(1.3);
+  transform: scale(0.96);
+  box-shadow: 0 0 14px rgba(100,180,255,0.5);
+}
+.dg-btn .lbl {
+  font-family: 'Segoe Script','Brush Script MT',cursive;
+  font-weight: bold;
+  color: white;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  text-align: center;
+}
+
+
+/* ══ MODE QUIZ ══ */
+#mode-toggle {
+  display: flex;
+  gap: 0;
+  background: rgba(255,255,255,0.07);
+  border-radius: 20px;
+  padding: 3px;
+  margin-bottom: 6px;
+}
+.mode-btn {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: clamp(0.6rem, 1.3vw, 0.82rem);
+  padding: 5px 14px;
+  border-radius: 17px;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: rgba(255,255,255,0.45);
+  transition: all 0.18s;
+}
+.mode-btn.active {
+  background: rgba(255,255,255,0.15);
+  color: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+#quiz-area {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+#quiz-area.visible { display: flex; }
+
+#quiz-syllabe {
+  font-family: 'Fredoka One', cursive;
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  color: white;
+  letter-spacing: 4px;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.quiz-slot {
+  width: clamp(40px, 7vw, 60px);
+  height: clamp(40px, 7vw, 60px);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Segoe Script','Brush Script MT',cursive;
+  font-size: clamp(1.2rem, 3.5vw, 2rem);
+  transition: all 0.2s;
+}
+.quiz-slot.empty {
+  background: rgba(255,255,255,0.06);
+  border: 2px dashed rgba(255,255,255,0.2);
+  color: transparent;
+}
+.quiz-slot.filled {
+  background: rgba(255,255,255,0.12);
+  border: 2px solid rgba(255,255,255,0.3);
+  color: white;
+}
+.quiz-slot.correct {
+  background: rgba(100,255,120,0.2);
+  border-color: #4cff72;
+  color: #4cff72;
+  box-shadow: 0 0 14px rgba(76,255,114,0.35);
+}
+.quiz-slot.wrong {
+  background: rgba(255,80,80,0.2);
+  border-color: #ff5050;
+  color: #ff8080;
+  animation: shake 0.3s ease;
+}
+@keyframes shake {
+  0%,100%{ transform:translateX(0) }
+  25%{ transform:translateX(-5px) }
+  75%{ transform:translateX(5px) }
+}
+
+#quiz-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+#btn-rejouer {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: clamp(0.65rem, 1.3vw, 0.82rem);
+  padding: 5px 14px;
+  border-radius: 16px;
+  border: none;
+  cursor: pointer;
+  background: rgba(100,150,255,0.25);
+  color: #a0c0ff;
+  transition: all 0.15s;
+}
+#btn-rejouer:hover { background: rgba(100,150,255,0.4); }
+
+#score-display {
+  font-size: clamp(0.7rem, 1.3vw, 0.85rem);
+  color: rgba(255,255,255,0.4);
+  font-weight: 700;
+}
+#quiz-feedback {
+  font-size: clamp(0.75rem, 1.4vw, 0.9rem);
+  font-weight: 800;
+  min-height: 22px;
+  transition: all 0.2s;
+}
+
+/* ══ BULLE FLASH ══ */
+#bubble {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%) scale(0);
+  border-radius: 50%;
+  width: clamp(110px,18vmin,180px);
+  height: clamp(110px,18vmin,180px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 300;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  transition: transform .15s cubic-bezier(.34,1.56,.64,1);
+  text-align: center;
+}
+#bubble.show { transform: translate(-50%,-50%) scale(1); }
+#bubble-text {
+  font-family: 'Fredoka One', cursive;
+  font-size: clamp(2.5rem, 8vmin, 5rem);
+  color: white;
+  text-shadow: 0 3px 10px rgba(0,0,0,0.5);
+}
+</style>
+</head>
+<body>
+
+<h1>🎹 Piano Syllabique</h1>
+
+<!-- Bascule de mode -->
+<div id="mode-toggle">
+  <button class="mode-btn active" id="btn-mode-libre" onclick="setMode('libre')">🎹 Libre</button>
+  <button class="mode-btn" id="btn-mode-quiz" onclick="setMode('quiz')">🎯 Quiz</button>
+</div>
+
+<!-- Zone quiz -->
+<div id="quiz-area">
+  <div id="quiz-syllabe">
+    <div class="quiz-slot empty" id="slot-1">?</div>
+    <div class="quiz-slot empty" id="slot-2">?</div>
+  </div>
+  <div id="quiz-controls">
+    <button id="btn-rejouer" onclick="rejouerSon()">🔊 Réécouter</button>
+    <span id="score-display">0 / 0</span>
+  </div>
+  <p id="quiz-hint-text" style="color:rgba(255,255,255,0.35);font-size:clamp(0.6rem,1.1vw,0.75rem);min-height:18px"> </p>
+  <p id="quiz-feedback"> </p>
+</div>
+
+<!-- Affichage syllabe en cours -->
+<div id="syllabe-display">
+  <div class="syl-box" id="box-c">?</div>
+  <span id="arrow">+</span>
+  <div class="syl-box" id="box-v">?</div>
+  <span id="arrow2" style="color:rgba(255,255,255,0.2);font-size:1.4rem;transition:color 0.2s">=</span>
+  <div class="syl-box" id="box-result">…</div>
+</div>
+<p id="hint-text">👆 Choisis une consonne (touche blanche)</p>
+
+<!-- Piano + digraphes -->
+<div id="main-layout">
+  <div id="piano-wrap">
+    <div id="piano"></div>
+  </div>
+  <div id="digraphe-panel">
+    <h3>Digraphes</h3>
+    <!-- rempli par JS -->
+  </div>
+</div>
+
+<div id="bubble"><span id="bubble-text"></span></div>
+
+<script>
+// ══════════════════════════════════════════════════
+//  DONNÉES
+// ══════════════════════════════════════════════════
+
+// Consonnes simples → touches blanches
+const CONSONNES = [
+  { id:'l',  label:'l',  color:'#7B4FC8' },
+  { id:'f',  label:'f',  color:'#D93B2D' },
+  { id:'s',  label:'s',  color:'#8BC34A' },
+  { id:'m',  label:'m',  color:'#607D8B' },
+  { id:'r',  label:'r',  color:'#42A5F5' },
+  { id:'n',  label:'n',  color:'#1E88E5' },
+  { id:'v',  label:'v',  color:'#5E35B1' },
+  { id:'j',  label:'j',  color:'#F9A825' },
+  { id:'z',  label:'z',  color:'#8D6E63' },
+  { id:'p',  label:'p',  color:'#1565C0' },
+  { id:'t',  label:'t',  color:'#00897B' },
+  { id:'c',  label:'c',  color:'#26C6DA' },
+  { id:'b',  label:'b',  color:'#BA68C8' },
+  { id:'d',  label:'d',  color:'#EF5350' },
+  { id:'g',  label:'g',  color:'#78909C' },
+];
+
+// Voyelles → touches noires
+// after = index de la touche blanche à gauche
+const VOYELLES = [
+  // tts = ce qu'on envoie à la TTS À LA PLACE de la voyelle
+  // suf = suffixe ajouté APRÈS la syllabe pour aider la TTS (invisible)
+  { id:'a',  label:'a',  color:'#9C27B0', after:0,  tts:'a'   },
+  { id:'i',  label:'i',  color:'#E65100', after:1,  tts:'i'   },
+  { id:'u',  label:'u',  color:'#2E7D32', after:2,  tts:'u'   },
+  { id:'e',  label:'e',  color:'#546E7A', after:3,  tts:'e',   sub:'e muet' },
+  { id:'é',  label:'é',  color:'#1565C0', after:4,  tts:'é',   sub:'er·ez' },
+  { id:'è',  label:'è',  color:'#283593', after:5,  tts:'è',   sub:'ê·ai' },
+  { id:'ou', label:'ou', color:'#4E342E', after:7,  tts:'ou',  suf:'t'  },
+  { id:'on', label:'on', color:'#1B5E20', after:8,  tts:'on',  suf:'t'  },
+  { id:'oi', label:'oi', color:'#004D40', after:9,  tts:'oi',  suf:'t'  },
+  { id:'an', label:'an', color:'#37474F', after:10, tts:'an',  suf:'t',  sub:'en' },
+  { id:'in', label:'in', color:'#006064', after:11, tts:'ain', suf:'s',  sub:'ain' },
+  { id:'eu', label:'eu', color:'#880E4F', after:13, tts:'eu',  suf:'x',  sub:'œu' },
+];
+
+// Digraphes consonantiques → panneau latéral
+const DIGRAPHES = [
+  { id:'ch', label:'ch', color:'#E07820' },
+  { id:'gn', label:'gn', color:'#37474F' },
+  { id:'ph', label:'ph', color:'#B71C1C' },
+  { id:'qu', label:'qu', color:'#006064' },
+  { id:'ss', label:'ss', color:'#4A148C' },
+  { id:'tr', label:'tr', color:'#1B5E20' },
+  { id:'br', label:'br', color:'#880E4F' },
+  { id:'cr', label:'cr', color:'#E65100' },
+  { id:'pr', label:'pr', color:'#1565C0' },
+  { id:'gr', label:'gr', color:'#827717' },
+  { id:'fr', label:'fr', color:'#3E2723' },
+  { id:'vr', label:'vr', color:'#2E7D32' },
+];
+
+// ══════════════════════════════════════════════════
+//  ÉTAT
+// ══════════════════════════════════════════════════
+let selectedC = null;  // consonne/digraphe sélectionnée
+let selectedV = null;  // voyelle sélectionnée
+let pressOrder = [];   // ordre de frappe : ['c','v'] ou ['v','c']
+
+// ══════════════════════════════════════════════════
+//  TTS
+// ══════════════════════════════════════════════════
+let ttsVoice = null;
+function loadVoices() {
+  const vs = speechSynthesis.getVoices();
+  ttsVoice = vs.find(v => v.lang === 'fr-FR') || vs.find(v => v.lang.startsWith('fr')) || vs[0];
+}
+loadVoices();
+if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = loadVoices;
+
+function speak(syllabe) {
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(syllabe);
+  u.lang  = 'fr-FR';
+  u.rate  = 0.65;
+  u.pitch = 1.05;
+  if (ttsVoice) u.voice = ttsVoice;
+  speechSynthesis.speak(u);
+}
+
+// ══════════════════════════════════════════════════
+//  LOGIQUE SYLLABE
+// ══════════════════════════════════════════════════
+function selectConsonne(key, el) {
+  if (currentMode === 'quiz') { quizPressConsonne(key, el); return; }
+  deselectAll('c');
+  selectedC = key;
+  el.classList.add('selected');
+  if (!selectedV) pressOrder = ['c'];
+
+  const boxC = document.getElementById('box-c');
+  boxC.textContent = key.label;
+  boxC.classList.add('filled');
+
+  updateHint();
+  if (selectedC && selectedV) playSyllabe();
+}
+
+function selectVoyelle(key, el) {
+  if (currentMode === 'quiz') { quizPressVoyelle(key, el); return; }
+  deselectAll('v');
+  selectedV = key;
+  el.classList.add('selected');
+  if (!selectedC) pressOrder = ['v'];
+
+  const boxV = document.getElementById('box-v');
+  boxV.textContent = key.label;
+  boxV.classList.add('filled');
+
+  updateHint();
+  if (selectedC && selectedV) playSyllabe();
+}
+
+function deselectAll(type) {
+  if (type === 'c') {
+    document.querySelectorAll('.wk.selected, .dg-btn.selected').forEach(e => e.classList.remove('selected'));
+    selectedC = null;
+  } else {
+    document.querySelectorAll('.bk.selected').forEach(e => e.classList.remove('selected'));
+    selectedV = null;
+  }
+}
+
+function updateHint() {
+  const hint   = document.getElementById('hint-text');
+  const arrow  = document.getElementById('arrow');
+  const arrow2 = document.getElementById('arrow2');
+
+  if (!selectedC && !selectedV) {
+    hint.textContent = '👆 Choisis une consonne (touche blanche)';
+    hint.className = '';
+    arrow.style.color  = 'rgba(255,255,255,0.2)';
+    arrow2.style.color = 'rgba(255,255,255,0.2)';
+  } else if (selectedC && !selectedV) {
+    hint.textContent = '🎹 Maintenant choisis une voyelle (touche noire)';
+    hint.className = 'step2';
+    arrow.style.color  = '#ff9050';
+    arrow2.style.color = 'rgba(255,255,255,0.2)';
+  } else if (!selectedC && selectedV) {
+    hint.textContent = '👆 Choisis une consonne (touche blanche)';
+    hint.className = '';
+  } else {
+    hint.textContent = '✅ La syllabe joue !';
+    hint.className = 'go';
+    arrow2.style.color = '#7cfc00';
+  }
+}
+
+function resetAll() {
+  pressOrder = [];
+  document.querySelectorAll('.wk.selected, .dg-btn.selected').forEach(e => e.classList.remove('selected'));
+  document.querySelectorAll('.bk.selected').forEach(e => e.classList.remove('selected'));
+  selectedC = null;
+  selectedV = null;
+  document.getElementById('box-c').textContent = '?';
+  document.getElementById('box-c').classList.remove('filled');
+  document.getElementById('box-v').textContent = '?';
+  document.getElementById('box-v').classList.remove('filled');
+  document.getElementById('box-result').textContent = '…';
+  document.getElementById('box-result').classList.remove('playing');
+  document.getElementById('arrow').style.color  = 'rgba(255,255,255,0.2)';
+  document.getElementById('arrow2').style.color = 'rgba(255,255,255,0.2)';
+  document.getElementById('hint-text').textContent = '👆 Choisis une consonne (touche blanche)';
+  document.getElementById('hint-text').className = '';
+}
+
+// ══════════════════════════════════════════════════
+//  CONSTRUCTION TTS CENTRALISÉE
+// ══════════════════════════════════════════════════
+function buildTtsText(c, v, ordre, avecSuf = true) {
+  const vTts = v.tts || v.id;
+  let cTts   = c.id;
+
+  const voyellesDouces = new Set(['i','e','é','è','eu','in']);
+  const estDouce = voyellesDouces.has(v.id);
+
+  if (cTts === 'c') cTts = estDouce ? 's' : 'k';
+  if (cTts === 'g') cTts = estDouce ? 'j' : 'g';
+
+  const cFixes = { 'qu':'k', 'ss':'s', 'ph':'f', 'gn':'gni' };
+  if (cFixes[cTts]) cTts = cFixes[cTts];
+
+  const suf = avecSuf ? (v.suf || '') : '';
+
+  if (ordre === 'vc') {
+    return vTts + cTts + suf;
+  } else {
+    // Pour 'in' : toujours utiliser 'ein' pour éviter les mots anglais (chains, trains...)
+    if (v.id === 'in') {
+      // Vrais mots français [ɛ̃] — évite les mots allemands/anglais
+      // (fein=DE, mein=DE, nein=DE, bein=DE, dein=DE, vein=EN, tein=inconnu)
+      const MOTS_IN = {
+        'l' :'lin',   // [lɛ̃]
+        'f' :'faim',  // [fɛ̃]
+        's' :'sain',  // [sɛ̃]
+        'm' :'main',  // [mɛ̃]
+        'r' :'rein',  // [ʁɛ̃]
+        'n' :'nain',  // [nɛ̃]
+        'v' :'vain',  // [vɛ̃]
+        'j' :'geint', // [ʒɛ̃] (verbe geindre)
+        'z' :'zain',  // [zɛ̃]
+        'p' :'pain',  // [pɛ̃]
+        't' :'teint', // [tɛ̃]
+        'b' :'bain',  // [bɛ̃]
+        'd' :'daim',  // [dɛ̃]
+        'k' :'quint', // [kɛ̃]
+        'ch':'chien', // [ʃjɛ̃]
+        'tr':'train', // [tʁɛ̃]
+        'br':'brin',  // [bʁɛ̃]
+        'cr':'crin',  // [kʁɛ̃]
+        'pr':'prain', // [pʁɛ̃]
+        'gr':'grain', // [ɡʁɛ̃]
+        'fr':'frein', // [fʁɛ̃]
+        'vr':'vrein', // [vʁɛ̃]
+      };
+      return MOTS_IN[cTts] || (cTts + 'ain');
+    }
+    return cTts + vTts + suf;
+  }
+}
+
+function playSyllabe() {
+  if (!selectedC || !selectedV) return;
+
+  const ordre = pressOrder[0] === 'v' ? 'vc' : 'cv';
+  const ttsText = buildTtsText(selectedC, selectedV, ordre);
+
+  // Afficher le résultat
+  const boxResult = document.getElementById('box-result');
+  boxResult.textContent = (pressOrder[0] === 'v')
+    ? selectedV.label + selectedC.label
+    : selectedC.label + selectedV.label;
+  boxResult.classList.add('playing');
+  setTimeout(() => boxResult.classList.remove('playing'), 800);
+
+  // Bulle flash
+  const sylLabel = (pressOrder[0] === 'v')
+    ? selectedV.label + selectedC.label
+    : selectedC.label + selectedV.label;
+  showBubble(sylLabel, selectedC.color);
+
+  // TTS + reset garanti par setTimeout (onend non fiable sur Safari/iOS)
+  speechSynthesis.cancel();
+  setTimeout(() => {
+    const u = new SpeechSynthesisUtterance(ttsText);
+    u.lang  = 'fr-FR';
+    u.rate  = 0.65;
+    u.pitch = 1.05;
+    if (ttsVoice) u.voice = ttsVoice;
+    speechSynthesis.speak(u);
+    // Reset après durée estimée (nb caractères × 350ms, min 900ms)
+    const delay = Math.max(900, ttsText.length * 350);
+    setTimeout(resetAll, delay);
+  }, 50);
+}
+
+// ══════════════════════════════════════════════════
+//  BULLE
+// ══════════════════════════════════════════════════
+const bubbleEl   = document.getElementById('bubble');
+const bubbleText = document.getElementById('bubble-text');
+let bTimer;
+
+function showBubble(text, color) {
+  bubbleText.textContent = text;
+  bubbleEl.style.background = color + 'f0';
+  bubbleEl.classList.add('show');
+  clearTimeout(bTimer);
+  bTimer = setTimeout(() => bubbleEl.classList.remove('show'), 900);
+}
+
+function flash(color) {
+  const f = document.createElement('div');
+  f.style.cssText = `position:fixed;inset:0;background:${color};opacity:0.12;pointer-events:none;z-index:200;transition:opacity .25s`;
+  document.body.appendChild(f);
+  requestAnimationFrame(() => { f.style.opacity='0'; setTimeout(()=>f.remove(),270); });
+}
+
+// ══════════════════════════════════════════════════
+//  CONSTRUCTION DU CLAVIER
+// ══════════════════════════════════════════════════
+const pianoEl  = document.getElementById('piano');
+const pianoWrap= document.getElementById('piano-wrap');
+let wEls = [];
+
+function buildPiano() {
+  pianoEl.innerHTML = '';
+  wEls = [];
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // Espace disponible pour le piano (en dehors du panneau digraphes)
+  const panelW = Math.min(90, vw * 0.09) + 10 + 16; // largeur panneau + gap + padding
+  const pianoW = vw - panelW - 20;
+
+  const n    = CONSONNES.length;
+  const gap  = 3;
+  const kW   = Math.max(34, Math.min(Math.floor((pianoW - gap*(n+1)) / n), 82));
+  const kH   = Math.max(150, Math.min(Math.floor(vh * 0.58), 300));
+  const bkW  = Math.round(kW * 0.62);
+  const bkH  = Math.round(kH * 0.60);
+  const lFs  = Math.max(11, Math.min(Math.floor(kW * 0.40), 30));
+  const blFs = Math.max(9,  Math.min(Math.floor(bkW * 0.40), 18));
+
+  pianoEl.style.height = kH + 'px';
+
+  // ── Touches blanches (consonnes)
+  CONSONNES.forEach(k => {
+    const el = document.createElement('div');
+    el.className = 'wk';
+    el.id = 'wk-' + k.id;
+    el.style.cssText = `
+      width:${kW}px; height:${kH}px;
+      background-color:${k.color};
+      margin: 0 ${Math.ceil(gap/2)}px;
+    `;
+    const lfs = k.label.length > 1 ? Math.round(lFs * 0.75) : lFs;
+    el.innerHTML = `<span class="lbl" style="font-size:${lfs}px">${k.label}</span>`;
+    el.addEventListener('pointerdown', () => {
+      selectConsonne(k, el);
+      flash(k.color);
+    });
+    pianoEl.appendChild(el);
+    wEls.push(el);
+  });
+
+  // ── Touches noires (voyelles) — positionnées après rendu
+  requestAnimationFrame(() => {
+    const cRect = pianoEl.getBoundingClientRect();
+    VOYELLES.forEach(k => {
+      const lEl = wEls[k.after];
+      const rEl = wEls[k.after + 1];
+      if (!lEl || !rEl) return;
+
+      const lR = lEl.getBoundingClientRect();
+      const rR = rEl.getBoundingClientRect();
+      const cx = (lR.right + rR.left) / 2 - cRect.left;
+
+      const el = document.createElement('div');
+      el.className = 'bk';
+      el.id = 'bk-' + k.id;
+
+      const subHtml = k.sub
+        ? `<span class="sub" style="font-size:${Math.round(blFs*0.7)}px">${k.sub}</span>`
+        : '';
+      el.innerHTML = `${subHtml}<span class="lbl" style="font-size:${blFs}px">${k.label}</span>`;
+
+      el.style.cssText = `
+        width:${bkW}px; height:${bkH}px;
+        background-color:${k.color};
+        left:${cx - bkW/2}px;
+      `;
+      el.addEventListener('pointerdown', e => {
+        e.stopPropagation();
+        selectVoyelle(k, el);
+        flash(k.color);
+      });
+      pianoEl.appendChild(el);
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════
+//  PANNEAU DIGRAPHES
+// ══════════════════════════════════════════════════
+function buildDigraphes() {
+  const panel = document.getElementById('digraphe-panel');
+  // Garder le titre
+  const title = panel.querySelector('h3');
+  panel.innerHTML = '';
+  panel.appendChild(title);
+
+  const panelW = panel.clientWidth || 80;
+  const lFs = Math.max(10, Math.min(Math.floor(panelW * 0.3), 18));
+
+  DIGRAPHES.forEach(k => {
+    const el = document.createElement('div');
+    el.className = 'dg-btn';
+    el.id = 'dg-' + k.id;
+    el.style.cssText = `background-color:${k.color};`;
+    el.innerHTML = `<span class="lbl" style="font-size:${lFs}px">${k.label}</span>`;
+    el.addEventListener('pointerdown', () => {
+      selectConsonne(k, el);
+      flash(k.color);
+    });
+    panel.appendChild(el);
+  });
+}
+
+
+// ══════════════════════════════════════════════════
+//  MODE QUIZ
+// ══════════════════════════════════════════════════
+let currentMode = 'libre';
+let quizCible   = null;  // { c, v, ordre } la syllabe à trouver
+let quizPresses = [];    // touches appuyées dans l'ordre
+let score = { ok: 0, total: 0 };
+
+// Toutes les syllabes jouables (consonnes × voyelles, ordre C+V et V+C)
+function getAllSyllabes() {
+  const all = [];
+  // Quiz : uniquement consonnes simples, ordre C+V uniquement
+  CONSONNES.forEach(c => {
+    VOYELLES.forEach(v => {
+      all.push({ c, v, ordre: 'cv' });
+    });
+  });
+  return all;
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('btn-mode-libre').classList.toggle('active', mode === 'libre');
+  document.getElementById('btn-mode-quiz').classList.toggle('active',  mode === 'quiz');
+  document.getElementById('quiz-area').classList.toggle('visible', mode === 'quiz');
+  document.getElementById('syllabe-display').style.display = mode === 'libre' ? '' : 'none';
+  document.getElementById('hint-text').style.display = mode === 'libre' ? '' : 'none';
+
+  if (mode === 'quiz') {
+    resetAll();
+    nouvelleSyllabe();
+  }
+}
+
+function nouvelleSyllabe() {
+  // Choisir une syllabe aléatoire
+  const all = getAllSyllabes();
+  quizCible  = all[Math.floor(Math.random() * all.length)];
+  quizPresses = [];
+
+  // Remettre les slots vides
+  setSlot(1, null);
+  setSlot(2, null);
+  document.getElementById('quiz-feedback').textContent = ' ';
+  document.getElementById('quiz-feedback').style.color = 'white';
+  document.getElementById('quiz-hint-text').textContent = '1️⃣ Consonne (touche blanche)  →  2️⃣ Voyelle (touche noire)';
+
+  // Déselectionner toutes les touches
+  document.querySelectorAll('.wk.selected,.bk.selected,.dg-btn.selected')
+    .forEach(e => e.classList.remove('selected'));
+
+  // Lire le son après un court délai
+  setTimeout(() => lireCible(), 400);
+}
+
+function lireCible() {
+  if (!quizCible) return;
+  const { c, v, ordre } = quizCible;
+  // Construire le ttsText exactement comme playSyllabe
+  const ttsText = buildTtsText(c, v, ordre, false);
+
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(ttsText);
+  u.lang = 'fr-FR'; u.rate = 0.6; u.pitch = 1.05;
+  if (ttsVoice) u.voice = ttsVoice;
+  speechSynthesis.speak(u);
+}
+
+function rejouerSon() { lireCible(); }
+
+function setSlot(n, key) {
+  const slot = document.getElementById('slot-' + n);
+  if (!key) {
+    slot.textContent = '?';
+    slot.className   = 'quiz-slot empty';
+  } else {
+    slot.textContent = key.label;
+    slot.className   = 'quiz-slot filled';
+    slot.style.borderColor = key.color;
+    slot.style.background  = key.color + '33';
+    slot.style.color       = 'white';
+  }
+}
+
+function quizPressConsonne(key, el) {
+  if (quizPresses.length >= 2) return;
+  quizPresses.push({ type:'c', key });
+  el.classList.add('selected');
+  setSlot(quizPresses.length, key);
+  if (quizPresses.length === 1)
+    document.getElementById('quiz-hint-text').textContent = '2️⃣ Maintenant la voyelle (touche noire)';
+  if (quizPresses.length === 2) verifierReponse();
+}
+
+function quizPressVoyelle(key, el) {
+  if (quizPresses.length >= 2) return;
+  quizPresses.push({ type:'v', key });
+  el.classList.add('selected');
+  setSlot(quizPresses.length, key);
+  if (quizPresses.length === 2) verifierReponse();
+}
+
+function verifierReponse() {
+  const { c, v, ordre } = quizCible;
+  const p1 = quizPresses[0];
+  const p2 = quizPresses[1];
+
+  // Vérifier ordre et identité
+  let correct = false;
+  // Quiz toujours en ordre C+V
+  correct = p1.type === 'c' && p1.key.id === c.id &&
+            p2.type === 'v' && p2.key.id === v.id;
+
+  score.total++;
+  const fb = document.getElementById('quiz-feedback');
+
+  if (correct) {
+    score.ok++;
+    // Slots verts
+    document.getElementById('slot-1').className = 'quiz-slot correct';
+    document.getElementById('slot-2').className = 'quiz-slot correct';
+    fb.textContent = '✅ Bravo !';
+    fb.style.color = '#4cff72';
+    flash('#4cff72');
+    setTimeout(nouvelleSyllabe, 1200);
+  } else {
+    // Slots rouges + montrer la bonne réponse
+    document.getElementById('slot-1').className = 'quiz-slot wrong';
+    document.getElementById('slot-2').className = 'quiz-slot wrong';
+    const bon1 = c.label;
+    const bon2 = v.label;
+    fb.textContent = `❌  ${bon1} + ${bon2}`;
+    fb.style.color = '#ff8080';
+    flash('#ff5050');
+    setTimeout(nouvelleSyllabe, 2000);
+  }
+
+  // Mise à jour score
+  document.getElementById('score-display').textContent =
+    `${score.ok} / ${score.total}`;
+}
+
+// ══════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════
+window.addEventListener('load', () => {
+  buildPiano();
+  buildDigraphes();
+});
+window.addEventListener('resize', () => {
+  buildPiano();
+  buildDigraphes();
+});
+</script>
+</body>
+</html>

@@ -426,12 +426,12 @@ h1 {
 
 <div id="splash">
   <h2>🎹 Piano Syllabique</h2>
-  <div style="font-size:0.7rem;color:rgba(255,255,255,0.35);margin-bottom:6px">v2.6 — TBI Firefox</div>
+  <div style="font-size:0.7rem;color:rgba(255,255,255,0.35);margin-bottom:6px">v2.7 — TBI Firefox</div>
   <button id="splash-btn">▶ Appuie pour commencer</button>
   <div id="tts-status" style="margin-top:10px;font-size:0.65rem;color:rgba(255,255,255,0.35)">Détection audio…</div>
 </div>
 
-<h1>🎹 Piano Syllabique <span style="font-size:0.45em;opacity:0.35;font-family:Nunito">v2.6</span></h1>
+<h1>🎹 Piano Syllabique <span style="font-size:0.45em;opacity:0.35;font-family:Nunito">v2.7</span></h1>
 
 <!-- Bascule de mode -->
 <div id="mode-toggle">
@@ -569,48 +569,26 @@ function demarrer() {
     return;
   }
 
-  // Web Speech API — attendre que les voix soient chargées (Firefox Android lazy)
-  statusEl.textContent = '⏳ Chargement des voix…';
-
-  function trySpeak(tentative) {
-    const voix = speechSynthesis.getVoices();
-    const fr = voix.find(v => v.lang === 'fr-FR')
-            || voix.find(v => v.lang === 'fr')
-            || voix.find(v => v.lang.startsWith('fr'));
-
-    if (fr) {
-      ttsVoiceFallback = fr;
-      statusEl.textContent = '🔊 Web Speech: ' + fr.name;
-    } else if (voix.length > 0) {
-      // Pas de voix FR mais des voix dispo — tenter quand même avec lang fr-FR
-      statusEl.textContent = '⚠️ Pas de voix FR — tentative (' + voix.length + ' voix: ' + voix[0].lang + ')';
-    } else if (tentative < 15) {
-      statusEl.textContent = '⏳ Voix non chargées (' + tentative + '/15)…';
-      setTimeout(() => trySpeak(tentative + 1), 300);
-      return;
-    } else {
-      statusEl.textContent = '❌ Aucune voix disponible sur ce TBI';
-      setTimeout(() => document.getElementById('splash').style.display = 'none', 3000);
-      return;
-    }
-
-    // Test audio réel
-    speechSynthesis.cancel();
-    setTimeout(() => {
-      const u = new SpeechSynthesisUtterance('a');
-      u.lang = 'fr-FR';
-      u.rate = 0.8;
-      u.volume = 1;
-      if (ttsVoiceFallback) u.voice = ttsVoiceFallback;
-      speechSynthesis.speak(u);
-    }, 200);
-
-    setTimeout(() => document.getElementById('splash').style.display = 'none', 1200);
+  // Firefox Android : getVoices() reste vide indéfiniment — on parle directement
+  // et on ferme le splash sans attendre
+  const voix = speechSynthesis.getVoices();
+  const fr = voix.find(v => v.lang.startsWith('fr')) || null;
+  if (fr) {
+    ttsVoiceFallback = fr;
+    statusEl.textContent = '🔊 Web Speech: ' + fr.name;
+  } else {
+    statusEl.textContent = '🔊 Web Speech (voix système)';
   }
 
-  // Firefox Android : onvoiceschanged + polling
-  speechSynthesis.onvoiceschanged = () => trySpeak(0);
-  trySpeak(0);
+  // Parler sans attendre — Firefox utilisera le moteur TTS Android
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance('a');
+  u.lang = 'fr-FR'; u.rate = 0.8; u.volume = 1;
+  if (ttsVoiceFallback) u.voice = ttsVoiceFallback;
+  speechSynthesis.speak(u);
+
+  // Fermer le splash dans tous les cas après 1s
+  setTimeout(() => document.getElementById('splash').style.display = 'none', 1000);
 }
 
 function speak(syllabe, onEnd) {

@@ -420,6 +420,7 @@ h1 {
   text-shadow: 0 3px 10px rgba(0,0,0,0.5);
 }
 </style>
+<script src="https://code.responsivevoice.org/responsivevoice.js?key=FREE"></script>
 </head>
 <body>
 
@@ -542,44 +543,40 @@ let pressOrder = [];   // ordre de frappe : ['c','v'] ou ['v','c']
 // ══════════════════════════════════════════════════
 //  TTS
 // ══════════════════════════════════════════════════
-let ttsVoice = null;
-function loadVoices() {
-  const vs = speechSynthesis.getVoices();
-  ttsVoice = vs.find(v => v.lang === 'fr-FR') || vs.find(v => v.lang.startsWith('fr')) || vs[0];
+// ── TTS via ResponsiveVoice (compatible Firefox Android, Chrome, Safari) ──
+// Fallback Web Speech API si ResponsiveVoice non disponible
+function rvDisponible() {
+  return typeof responsiveVoice !== 'undefined' && responsiveVoice.voiceSupport();
 }
-loadVoices();
-if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = loadVoices;
 
 function demarrer() {
-  // Déclencher un utterance vide pour débloquer l'audio sur Android Chrome
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(' ');
-  u.volume = 0;
-  u.lang = 'fr-FR';
-  speechSynthesis.speak(u);
-  // Attendre que les voix soient chargées (Android les charge en lazy)
-  function tryLoadVoice(attempts) {
-    const vs = speechSynthesis.getVoices();
-    const fr = vs.find(v => v.lang === 'fr-FR') || vs.find(v => v.lang.startsWith('fr'));
-    if (fr) {
-      ttsVoice = fr;
-    } else if (attempts > 0) {
-      setTimeout(() => tryLoadVoice(attempts - 1), 200);
+  // Initialiser ResponsiveVoice avec un son silencieux pour débloquer l'audio
+  if (rvDisponible()) {
+    responsiveVoice.speak(' ', 'French Female', { volume: 0 });
+  } else {
+    // Fallback Web Speech API
+    if (typeof speechSynthesis !== 'undefined') {
+      const u = new SpeechSynthesisUtterance(' ');
+      u.volume = 0; u.lang = 'fr-FR';
+      speechSynthesis.speak(u);
     }
   }
-  tryLoadVoice(10);
-  // Masquer le splash
   document.getElementById('splash').style.display = 'none';
 }
 
-function speak(syllabe) {
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(syllabe);
-  u.lang  = 'fr-FR';
-  u.rate  = 0.65;
-  u.pitch = 1.05;
-  if (ttsVoice) u.voice = ttsVoice;
-  speechSynthesis.speak(u);
+function speak(syllabe, onEnd) {
+  if (rvDisponible()) {
+    responsiveVoice.speak(syllabe, 'French Female', {
+      rate: 0.8, pitch: 1,
+      onend: onEnd || undefined
+    });
+  } else if (typeof speechSynthesis !== 'undefined') {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(syllabe);
+    u.lang = 'fr-FR'; u.rate = 0.6; u.pitch = 1.05;
+    if (onEnd) u.onend = onEnd;
+    speechSynthesis.speak(u);
+  }
 }
 
 // ══════════════════════════════════════════════════
@@ -764,18 +761,10 @@ function playSyllabe() {
   showBubble(sylLabel, selectedC.color);
 
   // TTS + reset garanti par setTimeout (onend non fiable sur Safari/iOS)
-  speechSynthesis.cancel();
-  setTimeout(() => {
-    const u = new SpeechSynthesisUtterance(ttsText);
-    u.lang  = 'fr-FR';
-    u.rate  = 0.65;
-    u.pitch = 1.05;
-    if (ttsVoice) u.voice = ttsVoice;
-    speechSynthesis.speak(u);
-    // Reset après durée estimée (nb caractères × 350ms, min 900ms)
-    const delay = Math.max(900, ttsText.length * 350);
-    setTimeout(resetAll, delay);
-  }, 50);
+  const delay = Math.max(900, ttsText.length * 350);
+  speak(ttsText, () => setTimeout(resetAll, 300));
+  // Filet de sécurité si onend ne se déclenche pas
+  setTimeout(resetAll, delay);
 }
 
 // ══════════════════════════════════════════════════
@@ -974,11 +963,7 @@ function lireCible() {
   // Construire le ttsText exactement comme playSyllabe
   const ttsText = buildTtsText(c, v, ordre, false);
 
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(ttsText);
-  u.lang = 'fr-FR'; u.rate = 0.6; u.pitch = 1.05;
-  if (ttsVoice) u.voice = ttsVoice;
-  speechSynthesis.speak(u);
+  speak(ttsText);
 }
 
 function rejouerSon() { lireCible(); }

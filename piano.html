@@ -426,10 +426,12 @@ h1 {
 
 <div id="splash" onclick="demarrer()">
   <h2>🎹 Piano Syllabique</h2>
+  <div style="font-size:0.7rem;color:rgba(255,255,255,0.35);margin-bottom:6px">v2.4 — TBI Firefox</div>
   <button id="splash-btn">▶ Appuie pour commencer</button>
+  <div id="tts-status" style="margin-top:10px;font-size:0.65rem;color:rgba(255,255,255,0.35)">Détection audio…</div>
 </div>
 
-<h1>🎹 Piano Syllabique</h1>
+<h1>🎹 Piano Syllabique <span style="font-size:0.45em;opacity:0.35;font-family:Nunito">v2.4</span></h1>
 
 <!-- Bascule de mode -->
 <div id="mode-toggle">
@@ -545,23 +547,34 @@ let pressOrder = [];   // ordre de frappe : ['c','v'] ou ['v','c']
 // ══════════════════════════════════════════════════
 // ── TTS via ResponsiveVoice (compatible Firefox Android, Chrome, Safari) ──
 // Fallback Web Speech API si ResponsiveVoice non disponible
+// rvDisponible : ResponsiveVoice chargé ? (pas besoin de voiceSupport() — RV gère tout)
 function rvDisponible() {
-  return typeof responsiveVoice !== 'undefined' && responsiveVoice.voiceSupport();
+  return typeof responsiveVoice !== 'undefined';
 }
 
 function demarrer() {
-  // Initialiser ResponsiveVoice avec un son silencieux pour débloquer l'audio
+  const statusEl = document.getElementById('tts-status');
+
   if (rvDisponible()) {
-    responsiveVoice.speak(' ', 'French Female', { volume: 0 });
-  } else {
+    // ResponsiveVoice disponible — déblocage avec son silencieux
+    statusEl.textContent = '🔊 TTS : ResponsiveVoice';
+    try {
+      responsiveVoice.speak('a', 'French Female', { volume: 0.01, rate: 1 });
+    } catch(e) { statusEl.textContent = '⚠️ RV erreur: ' + e.message; }
+  } else if (typeof speechSynthesis !== 'undefined') {
     // Fallback Web Speech API
-    if (typeof speechSynthesis !== 'undefined') {
-      const u = new SpeechSynthesisUtterance(' ');
-      u.volume = 0; u.lang = 'fr-FR';
-      speechSynthesis.speak(u);
-    }
+    statusEl.textContent = '🔊 TTS : Web Speech API';
+    const u = new SpeechSynthesisUtterance('a');
+    u.volume = 0.01; u.lang = 'fr-FR';
+    speechSynthesis.speak(u);
+  } else {
+    statusEl.textContent = '❌ Aucun TTS disponible sur ce navigateur';
+    setTimeout(() => document.getElementById('splash').style.display = 'none', 3000);
+    return;
   }
-  document.getElementById('splash').style.display = 'none';
+  setTimeout(() => {
+    document.getElementById('splash').style.display = 'none';
+  }, 600);
 }
 
 function speak(syllabe, onEnd) {

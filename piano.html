@@ -420,18 +420,17 @@ h1 {
   text-shadow: 0 3px 10px rgba(0,0,0,0.5);
 }
 </style>
-<script src="https://code.responsivevoice.org/responsivevoice.js?key=FREE"></script>
 </head>
 <body>
 
 <div id="splash">
   <h2>🎹 Piano Syllabique</h2>
-  <div style="font-size:0.7rem;color:rgba(255,255,255,0.35);margin-bottom:6px">v2.7 — TBI Firefox</div>
+  <div style="font-size:0.7rem;color:rgba(255,255,255,0.35);margin-bottom:6px">v2.8 — TBI Firefox</div>
   <button id="splash-btn">▶ Appuie pour commencer</button>
   <div id="tts-status" style="margin-top:10px;font-size:0.65rem;color:rgba(255,255,255,0.35)">Détection audio…</div>
 </div>
 
-<h1>🎹 Piano Syllabique <span style="font-size:0.45em;opacity:0.35;font-family:Nunito">v2.7</span></h1>
+<h1>🎹 Piano Syllabique <span style="font-size:0.45em;opacity:0.35;font-family:Nunito">v2.8</span></h1>
 
 <!-- Bascule de mode -->
 <div id="mode-toggle">
@@ -547,71 +546,88 @@ let pressOrder = [];   // ordre de frappe : ['c','v'] ou ['v','c']
 // ══════════════════════════════════════════════════
 // ── TTS via ResponsiveVoice (compatible Firefox Android, Chrome, Safari) ──
 // Fallback Web Speech API si ResponsiveVoice non disponible
-// rvDisponible : ResponsiveVoice chargé ? (pas besoin de voiceSupport() — RV gère tout)
-function rvDisponible() {
-  return typeof responsiveVoice !== 'undefined';
-}
+// ══ SYSTÈME TTS HYBRIDE ══════════════════════════════════════════
+// 1. Web Speech API  (Chrome, Safari, Firefox si activé)
+// 2. Google TTS via Audio element  (Firefox Android, fallback universel)
+//    → fonctionne dans n'importe quel navigateur avec internet
+// ═════════════════════════════════════════════════════════════════
+let useGoogleTTS  = false;
 let ttsVoiceFallback = null;
+
+function googleTTSUrl(text) {
+  return 'https://translate.google.com/translate_tts?ie=UTF-8'
+    + '&q=' + encodeURIComponent(text)
+    + '&tl=fr&client=tw-ob&ttsspeed=0.7';
+}
 
 function demarrer() {
   const statusEl = document.getElementById('tts-status');
 
-  if (rvDisponible()) {
-    statusEl.textContent = '🔊 ResponsiveVoice OK';
-    responsiveVoice.speak('a', 'French Female', { volume: 0.01 });
-    setTimeout(() => document.getElementById('splash').style.display = 'none', 600);
-    return;
-  }
+  // Test Web Speech API : si onstart ne se déclenche pas dans 1s → fallback Google TTS
+  if (typeof speechSynthesis !== 'undefined') {
+    statusEl.textContent = '⏳ Test Web Speech…';
+    const u = new SpeechSynthesisUtterance('a');
+    u.lang = 'fr-FR'; u.volume = 0.01;
 
-  if (typeof speechSynthesis === 'undefined') {
-    statusEl.textContent = '❌ Aucun TTS sur ce navigateur';
-    setTimeout(() => document.getElementById('splash').style.display = 'none', 3000);
-    return;
-  }
+    // Voix françaises disponibles
+    const voix = speechSynthesis.getVoices();
+    const fr = voix.find(v => v.lang.startsWith('fr'));
+    if (fr) { ttsVoiceFallback = fr; u.voice = fr; }
 
-  // Firefox Android : getVoices() reste vide indéfiniment — on parle directement
-  // et on ferme le splash sans attendre
-  const voix = speechSynthesis.getVoices();
-  const fr = voix.find(v => v.lang.startsWith('fr')) || null;
-  if (fr) {
-    ttsVoiceFallback = fr;
-    statusEl.textContent = '🔊 Web Speech: ' + fr.name;
+    let wsFonctionne = false;
+    u.onstart = () => {
+      wsFonctionne = true;
+      statusEl.textContent = '🔊 Web Speech API (' + (fr ? fr.name : 'voix système') + ')';
+    };
+    speechSynthesis.speak(u);
+
+    setTimeout(() => {
+      if (!wsFonctionne) {
+        // Web Speech silencieux → basculer sur Google TTS
+        speechSynthesis.cancel();
+        useGoogleTTS = true;
+        // Tester Google TTS
+        const testAudio = new Audio(googleTTSUrl('a'));
+        testAudio.oncanplaythrough = () => {
+          statusEl.textContent = '🔊 Google TTS (internet)';
+          testAudio.play().catch(() => {});
+        };
+        testAudio.onerror = () => {
+          statusEl.textContent = '❌ Ni Web Speech ni Google TTS accessibles';
+        };
+        testAudio.load();
+      }
+      setTimeout(() => document.getElementById('splash').style.display = 'none', 1200);
+    }, 1000);
+
   } else {
-    statusEl.textContent = '🔊 Web Speech (voix système)';
+    // Pas de Web Speech du tout → Google TTS direct
+    useGoogleTTS = true;
+    statusEl.textContent = '🔊 Google TTS (internet)';
+    setTimeout(() => document.getElementById('splash').style.display = 'none', 800);
   }
-
-  // Parler sans attendre — Firefox utilisera le moteur TTS Android
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance('a');
-  u.lang = 'fr-FR'; u.rate = 0.8; u.volume = 1;
-  if (ttsVoiceFallback) u.voice = ttsVoiceFallback;
-  speechSynthesis.speak(u);
-
-  // Fermer le splash dans tous les cas après 1s
-  setTimeout(() => document.getElementById('splash').style.display = 'none', 1000);
 }
 
 function speak(syllabe, onEnd) {
-  if (rvDisponible()) {
-    responsiveVoice.speak(syllabe, 'French Female', {
-      rate: 0.8, pitch: 1,
-      onend: onEnd || undefined
-    });
+  if (useGoogleTTS) {
+    // Google TTS : audio element — marche dans tout navigateur avec internet
+    const audio = new Audio(googleTTSUrl(syllabe));
+    if (onEnd) audio.onended = onEnd;
+    audio.onerror = () => { if (onEnd) onEnd(); };
+    audio.play().catch(() => { if (onEnd) onEnd(); });
     return;
   }
-  if (typeof speechSynthesis === 'undefined') return;
+  // Web Speech API
+  if (typeof speechSynthesis === 'undefined') { if (onEnd) setTimeout(onEnd, 500); return; }
   speechSynthesis.cancel();
   setTimeout(() => {
     const u = new SpeechSynthesisUtterance(syllabe);
-    u.lang  = 'fr-FR';
-    u.rate  = 0.7;
-    u.pitch = 1;
-    u.volume = 1;
+    u.lang = 'fr-FR'; u.rate = 0.7; u.pitch = 1; u.volume = 1;
     if (ttsVoiceFallback) u.voice = ttsVoiceFallback;
     if (onEnd) u.onend = onEnd;
-    u.onerror = (e) => console.warn('TTS erreur:', e.error, syllabe);
+    u.onerror = () => { if (onEnd) onEnd(); };
     speechSynthesis.speak(u);
-  }, 100);
+  }, 80);
 }
 
 // ══════════════════════════════════════════════════

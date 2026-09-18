@@ -551,30 +551,66 @@ let pressOrder = [];   // ordre de frappe : ['c','v'] ou ['v','c']
 function rvDisponible() {
   return typeof responsiveVoice !== 'undefined';
 }
+let ttsVoiceFallback = null;
 
 function demarrer() {
   const statusEl = document.getElementById('tts-status');
 
   if (rvDisponible()) {
-    // ResponsiveVoice disponible — déblocage avec son silencieux
-    statusEl.textContent = '🔊 TTS : ResponsiveVoice';
-    try {
-      responsiveVoice.speak('a', 'French Female', { volume: 0.01, rate: 1 });
-    } catch(e) { statusEl.textContent = '⚠️ RV erreur: ' + e.message; }
-  } else if (typeof speechSynthesis !== 'undefined') {
-    // Fallback Web Speech API
-    statusEl.textContent = '🔊 TTS : Web Speech API';
-    const u = new SpeechSynthesisUtterance('a');
-    u.volume = 0.01; u.lang = 'fr-FR';
-    speechSynthesis.speak(u);
-  } else {
-    statusEl.textContent = '❌ Aucun TTS disponible sur ce navigateur';
+    statusEl.textContent = '🔊 ResponsiveVoice OK';
+    responsiveVoice.speak('a', 'French Female', { volume: 0.01 });
+    setTimeout(() => document.getElementById('splash').style.display = 'none', 600);
+    return;
+  }
+
+  if (typeof speechSynthesis === 'undefined') {
+    statusEl.textContent = '❌ Aucun TTS sur ce navigateur';
     setTimeout(() => document.getElementById('splash').style.display = 'none', 3000);
     return;
   }
-  setTimeout(() => {
-    document.getElementById('splash').style.display = 'none';
-  }, 600);
+
+  // Web Speech API — attendre que les voix soient chargées (Firefox Android lazy)
+  statusEl.textContent = '⏳ Chargement des voix…';
+
+  function trySpeak(tentative) {
+    const voix = speechSynthesis.getVoices();
+    const fr = voix.find(v => v.lang === 'fr-FR')
+            || voix.find(v => v.lang === 'fr')
+            || voix.find(v => v.lang.startsWith('fr'));
+
+    if (fr) {
+      ttsVoiceFallback = fr;
+      statusEl.textContent = '🔊 Web Speech: ' + fr.name;
+    } else if (voix.length > 0) {
+      // Pas de voix FR mais des voix dispo — tenter quand même avec lang fr-FR
+      statusEl.textContent = '⚠️ Pas de voix FR — tentative (' + voix.length + ' voix: ' + voix[0].lang + ')';
+    } else if (tentative < 15) {
+      statusEl.textContent = '⏳ Voix non chargées (' + tentative + '/15)…';
+      setTimeout(() => trySpeak(tentative + 1), 300);
+      return;
+    } else {
+      statusEl.textContent = '❌ Aucune voix disponible sur ce TBI';
+      setTimeout(() => document.getElementById('splash').style.display = 'none', 3000);
+      return;
+    }
+
+    // Test audio réel
+    speechSynthesis.cancel();
+    setTimeout(() => {
+      const u = new SpeechSynthesisUtterance('a');
+      u.lang = 'fr-FR';
+      u.rate = 0.8;
+      u.volume = 1;
+      if (ttsVoiceFallback) u.voice = ttsVoiceFallback;
+      speechSynthesis.speak(u);
+    }, 200);
+
+    setTimeout(() => document.getElementById('splash').style.display = 'none', 1200);
+  }
+
+  // Firefox Android : onvoiceschanged + polling
+  speechSynthesis.onvoiceschanged = () => trySpeak(0);
+  trySpeak(0);
 }
 
 function speak(syllabe, onEnd) {
@@ -583,13 +619,21 @@ function speak(syllabe, onEnd) {
       rate: 0.8, pitch: 1,
       onend: onEnd || undefined
     });
-  } else if (typeof speechSynthesis !== 'undefined') {
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(syllabe);
-    u.lang = 'fr-FR'; u.rate = 0.6; u.pitch = 1.05;
-    if (onEnd) u.onend = onEnd;
-    speechSynthesis.speak(u);
+    return;
   }
+  if (typeof speechSynthesis === 'undefined') return;
+  speechSynthesis.cancel();
+  setTimeout(() => {
+    const u = new SpeechSynthesisUtterance(syllabe);
+    u.lang  = 'fr-FR';
+    u.rate  = 0.7;
+    u.pitch = 1;
+    u.volume = 1;
+    if (ttsVoiceFallback) u.voice = ttsVoiceFallback;
+    if (onEnd) u.onend = onEnd;
+    u.onerror = (e) => console.warn('TTS erreur:', e.error, syllabe);
+    speechSynthesis.speak(u);
+  }, 100);
 }
 
 // ══════════════════════════════════════════════════
